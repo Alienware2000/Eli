@@ -79,8 +79,8 @@ export function CardRail({
     <aside className="flex h-full min-h-0 flex-col border-l border-white/7 bg-base">
       <div className="px-4 pt-4 pb-3">
         <div className="flex items-baseline justify-between">
-          <h2 className="font-mono text-[13px] tracking-wide text-ink">Right now</h2>
-          <p className="font-mono text-[11px] text-muted">{visible.length}</p>
+          <h2 className="text-[16px] font-semibold tracking-tight text-ink">Right now</h2>
+          <p className="text-[13px] text-muted">{visible.length}</p>
         </div>
         <div className="mt-3 flex flex-wrap gap-1.5">
           {FILTERS.map((item) => (
@@ -95,7 +95,7 @@ export function CardRail({
           ))}
         </div>
       </div>
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pt-1 pb-40">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pt-1 pb-8">
         {!ready && !error && <p className="text-[13px] text-muted">sniffing the panlists…</p>}
         {error && cards.length === 0 && (
           <p className="text-[13px] text-muted">Lost that one in the stacks. Try again.</p>
@@ -151,7 +151,7 @@ function CardArticle({
   return (
     <article
       id={`card-${card.id}`}
-      className={`card px-4 py-3.5 ${card.id === HEADS_UP_ID ? "card-brief" : ""} ${
+      className={`card p-4 ${card.id === HEADS_UP_ID ? "card-brief" : ""} ${
         fresh ? "card-settle" : ""
       } ${selected ? "is-open" : ""}`}
       onMouseEnter={() => onHover(card.id)}
@@ -166,14 +166,14 @@ function CardArticle({
         className="block w-full text-left"
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="font-mono text-[10px] tracking-[0.16em] text-muted uppercase">
+          <span className="text-[11px] tracking-[0.14em] text-muted uppercase">
             {card.id === HEADS_UP_ID ? "Eli" : LABELS[card.type]}
           </span>
           {card.type === "event" && card.freeFood && (
-            <span className="font-mono text-[10px] tracking-wide text-amber uppercase">Free food</span>
+            <span className="text-[11px] tracking-wide text-amber uppercase">Free food</span>
           )}
         </div>
-        <h3 className="mt-2 text-[15px] leading-snug font-medium text-ink">{card.title}</h3>
+        <h3 className="mt-2 text-[16px] leading-normal font-semibold text-ink">{card.title}</h3>
         <CardBody card={card} />
         <p className="source-block">
           <span className="tracking-[0.14em] uppercase">Source</span>

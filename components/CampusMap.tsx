@@ -1,11 +1,25 @@
 "use client";
 
-import { MapContainer, Marker, Popup, TileLayer, ZoomControl } from "react-leaflet";
-import L from "leaflet";
+import { useEffect, useRef, useState } from "react";
+import {
+  Map as MlMap,
+  Marker,
+  NavigationControl,
+  Popup,
+  setWorkerUrl,
+  type FilterSpecification,
+  type MapLibreEvent,
+} from "maplibre-gl";
+
+setWorkerUrl("/maplibre-gl-worker.mjs");
 import type { Card } from "@/lib/types";
 import { cardTiming } from "@/lib/timing";
 import { venues, walkMinutes } from "@/lib/venues";
-import "leaflet/dist/leaflet.css";
+import "maplibre-gl/dist/maplibre-gl.css";
+
+const STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
+const CENTER: [number, number] = [-72.9274, 41.3111];
+const YOU: [number, number] = [-72.925, 41.3113];
 
 const COLLEGES: Record<string, string> = {
   "timothy-dwight": "TD",
@@ -25,56 +39,17 @@ const COLLEGES: Record<string, string> = {
   "benjamin-franklin": "Franklin",
 };
 
-const YOU: [number, number] = [41.3113, -72.925];
-const iconCache = new Map<string, L.DivIcon>();
+type Handlers = {
+  onSelect: (id: string) => void;
+  onHover: (id: string | null) => void;
+};
 
-function iconFor(className: string, label: string | undefined, hot: boolean) {
-  const key = `${className}:${label ?? ""}:${hot ? "1" : "0"}`;
-  const cached = iconCache.get(key);
-  if (cached) return cached;
-  const width = Math.max(28, (label?.length ?? 2) * 7);
-  const icon = L.divIcon({
-    className: "eli-pin",
-    html: `<span class="pin-stack"><span class="mark-pin ${className}${hot ? " pin-hot" : ""}"></span>${
-      label ? `<span class="college-label">${label}</span>` : ""
-    }</span>`,
-    iconSize: [width, label ? 28 : 16],
-    iconAnchor: [width / 2, 8],
-  });
-  iconCache.set(key, icon);
-  return icon;
-}
-
-function youIcon() {
-  return iconForYou();
-}
-
-function iconForYou() {
-  const cached = iconCache.get("you");
-  if (cached) return cached;
-  const icon = L.divIcon({
-    className: "eli-pin",
-    html: `<span class="you-pin"></span>`,
-    iconSize: [8, 8],
-    iconAnchor: [4, 4],
-  });
-  iconCache.set("you", icon);
-  return icon;
-}
-
-function labelIcon(label: string) {
-  const key = `label:${label}`;
-  const cached = iconCache.get(key);
-  if (cached) return cached;
-  const width = Math.max(28, label.length * 7);
-  const icon = L.divIcon({
-    className: "eli-pin",
-    html: `<span class="college-label">${label}</span>`,
-    iconSize: [width, 14],
-    iconAnchor: [width / 2, 7],
-  });
-  iconCache.set(key, icon);
-  return icon;
+function esc(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function pinClass(card: Card): string {
@@ -116,6 +91,68 @@ function whenOf(card: Card): string {
   return "";
 }
 
+function popupHtml(title: string, time: string, line: string, minutes: number): string {
+  return `<p class="pop-title">${esc(title)}</p>${
+    time ? `<p class="pop-time">${esc(time)}</p>` : ""
+  }${line ? `<p class="pop-line">${esc(line)}</p>` : ""}<p class="pop-walk">~${minutes} min walk</p>`;
+}
+
+function markerHtml(dot: string | null, label: string | undefined, hot: boolean): string {
+  const pin = dot
+    ? `<span class="mark-pin ${dot}${hot ? " pin-hot" : ""}"></span>`
+    : "";
+  const text = label ? `<span class="college-label">${esc(label)}</span>` : "";
+  return `<span class="pin-stack">${pin}${text}</span>`;
+}
+
+function quietLabels(map: MlMap) {
+  for (const layer of map.getStyle()?.layers ?? []) {
+    if (layer.type !== "symbol") continue;
+    const id = layer.id.toLowerCase();
+    const sourceLayer = "source-layer" in layer ? String(layer["source-layer"]).toLowerCase() : "";
+    const poi = sourceLayer === "pois" || /poi|park|playground|housenumber/.test(id);
+    if (poi && !id.startsWith("water")) map.setLayoutProperty(layer.id, "visibility", "none");
+  }
+  for (const id of ["watername_lake", "watername_lake_pois", "watername_lake_line"]) {
+    if (!map.getLayer(id)) continue;
+    const current = map.getFilter(id);
+    const drop: FilterSpecification = [
+      "!",
+      ["in", ["get", "kind"], ["literal", ["fountain", "basin", "playground"]]],
+    ];
+    map.setFilter(id, (current ? ["all", current, drop] : drop) as FilterSpecification);
+  }
+}
+
+function extrude(map: MlMap) {
+  quietLabels(map);
+  if (map.getLayer("eli-buildings")) return;
+  const layers = map.getStyle().layers ?? [];
+  const building = layers.find((layer) => layer.id === "building");
+  if (!building || !("source" in building) || typeof building.source !== "string") return;
+  const sourceLayer = "source-layer" in building ? building["source-layer"] : undefined;
+  if (!sourceLayer) return;
+  const before = layers.find((layer) => layer.type === "symbol")?.id;
+  map.addLayer(
+    {
+      id: "eli-buildings",
+      type: "fill-extrusion",
+      source: building.source,
+      "source-layer": sourceLayer,
+      minzoom: 14,
+      paint: {
+        "fill-extrusion-color": "#1A2030",
+        "fill-extrusion-opacity": 0.9,
+        "fill-extrusion-height": ["coalesce", ["get", "render_height"], ["get", "height"], 8],
+        "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], ["get", "min_height"], 0],
+      },
+    },
+    before,
+  );
+  if (map.getLayer("building")) map.setLayoutProperty("building", "visibility", "none");
+  if (map.getLayer("building-top")) map.setLayoutProperty("building-top", "visibility", "none");
+}
+
 export default function CampusMap({
   cards,
   selectedId,
@@ -129,85 +166,177 @@ export default function CampusMap({
   onSelect: (id: string) => void;
   onHover: (id: string | null) => void;
 }) {
-  const byVenue = new Map<string, Card[]>();
-  for (const card of cards) {
-    if (!card.venue || !venues[card.venue]) continue;
-    const list = byVenue.get(card.venue) ?? [];
-    list.push(card);
-    byVenue.set(card.venue, list);
-  }
+  const host = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<MlMap | null>(null);
+  const markers = useRef(new Map<string, { marker: Marker; popup: Popup }>());
+  const seen = useRef<Set<string> | null>(null);
+  const handlers = useRef<Handlers>({ onSelect, onHover });
+  const [ready, setReady] = useState(false);
+  handlers.current = { onSelect, onHover };
 
-  const keys = new Set<string>([...Object.keys(COLLEGES), ...byVenue.keys()]);
+  useEffect(() => {
+    const node = host.current;
+    if (!node || mapRef.current) return;
+    const map = new MlMap({
+      container: node,
+      style: STYLE,
+      center: CENTER,
+      zoom: 15.5,
+      pitch: 55,
+      bearing: -17,
+      minZoom: 15,
+      maxZoom: 19,
+      maxBounds: [
+        [-72.945, 41.3],
+        [-72.912, 41.322],
+      ],
+      attributionControl: { compact: true },
+    });
+    map.addControl(new NavigationControl({ showCompass: false }), "top-right");
 
-  return (
-    <MapContainer
-      center={[41.3111, -72.9274]}
-      zoom={16}
-      minZoom={15}
-      maxZoom={19}
-      zoomControl={false}
-      maxBounds={[
-        [41.3, -72.945],
-        [41.322, -72.912],
-      ]}
-      maxBoundsViscosity={1}
-      className="h-full w-full"
-    >
-      <TileLayer
-        attribution="© OpenStreetMap"
-        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-        maxZoom={19}
-      />
-      <ZoomControl position="topright" />
-      <Marker position={YOU} icon={youIcon()} zIndexOffset={50}>
-        <Popup>
-          <p className="pop-title">You are here</p>
-          <p className="pop-time">Tsai CITY</p>
-        </Popup>
-      </Marker>
-      {[...keys].map((key) => {
-        const venue = venues[key];
-        if (!venue) return null;
-        const here = byVenue.get(key) ?? [];
-        const card = here.length > 0 ? primaryCard(here) : undefined;
-        const label = COLLEGES[key];
-        const hot = here.some((item) => item.id === hoveredId || item.id === selectedId);
-        const icon = card ? iconFor(pinClass(card), label, hot) : labelIcon(label ?? venue.name);
-        const minutes = walkMinutes(venue.lat, venue.lng);
-        return (
-          <Marker
-            key={key}
-            position={[venue.lat, venue.lng]}
-            icon={icon}
-            zIndexOffset={card ? 200 : 0}
-            eventHandlers={{
-              click: () => {
-                if (card) onSelect(card.id);
-              },
-              mouseover: () => {
-                if (card) onHover(card.id);
-              },
-              mouseout: () => onHover(null),
-            }}
-          >
-            <Popup>
-              {card ? (
-                <>
-                  <p className="pop-title">{card.title}</p>
-                  <p className="pop-time">{whenOf(card)}</p>
-                  <p className="pop-line">{oneLine(card)}</p>
-                  <p className="pop-walk">~{minutes} min walk</p>
-                </>
-              ) : (
-                <>
-                  <p className="pop-title">{venue.name}</p>
-                  <p className="pop-walk">~{minutes} min walk</p>
-                </>
-              )}
-            </Popup>
-          </Marker>
-        );
-      })}
-    </MapContainer>
-  );
+    const you = document.createElement("div");
+    you.className = "eli-marker";
+    you.innerHTML = `<span class="you-pin"></span>`;
+    const youPopup = new Popup({ offset: 12, closeButton: true }).setHTML(
+      `<p class="pop-title">You are here</p><p class="pop-time">Tsai CITY</p>`,
+    );
+    new Marker({ element: you, anchor: "center" })
+      .setLngLat(YOU)
+      .setPopup(youPopup)
+      .addTo(map);
+
+    let idleAt = performance.now();
+    const touch = () => {
+      idleAt = performance.now();
+    };
+    map.on("mousedown", touch);
+    map.on("wheel", touch);
+    map.on("touchstart", touch);
+    map.on("dragstart", touch);
+    const gesture = (event: MapLibreEvent) => {
+      if (event.originalEvent) touch();
+    };
+    map.on("zoomstart", gesture);
+    map.on("rotatestart", gesture);
+    map.on("pitchstart", gesture);
+
+    let last = performance.now();
+    let frame = 0;
+    const spin = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      if (now - idleAt >= 30000 && !map.isMoving()) {
+        map.setBearing(map.getBearing() + 0.3 * dt);
+      }
+      frame = requestAnimationFrame(spin);
+    };
+    frame = requestAnimationFrame(spin);
+
+    map.on("load", () => {
+      extrude(map);
+      setReady(true);
+    });
+    mapRef.current = map;
+    return () => {
+      cancelAnimationFrame(frame);
+      markers.current.forEach((item) => item.marker.remove());
+      markers.current.clear();
+      map.remove();
+      mapRef.current = null;
+      setReady(false);
+    };
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+
+    let arrived: Card | null = null;
+    if (seen.current === null) {
+      seen.current = new Set(cards.map((card) => card.id));
+    } else {
+      const fresh = cards
+        .filter((card) => !seen.current?.has(card.id) && card.venue && venues[card.venue])
+        .sort((a, b) => (a.ts < b.ts ? 1 : -1));
+      for (const card of cards) seen.current.add(card.id);
+      arrived = fresh[0] ?? null;
+    }
+
+    const byVenue = new Map<string, Card[]>();
+    for (const card of cards) {
+      if (!card.venue || !venues[card.venue]) continue;
+      const list = byVenue.get(card.venue) ?? [];
+      list.push(card);
+      byVenue.set(card.venue, list);
+    }
+    const keys = new Set<string>([...Object.keys(COLLEGES), ...byVenue.keys()]);
+
+    for (const [key, item] of markers.current) {
+      if (!keys.has(key)) {
+        item.marker.remove();
+        markers.current.delete(key);
+      }
+    }
+
+    for (const key of keys) {
+      const venue = venues[key];
+      if (!venue) continue;
+      const here = byVenue.get(key) ?? [];
+      const card = here.length > 0 ? primaryCard(here) : undefined;
+      const label = COLLEGES[key];
+      const hot = here.some((item) => item.id === selectedId || item.id === hoveredId);
+      const html = markerHtml(card ? pinClass(card) : null, label, hot);
+      const minutes = walkMinutes(venue.lat, venue.lng);
+      const body = card
+        ? popupHtml(card.title, whenOf(card), oneLine(card), minutes)
+        : popupHtml(venue.name, "", "", minutes);
+      const anchor = card ? "top" : "center";
+      let record = markers.current.get(key);
+      if (record && record.marker.getElement().dataset.anchor !== anchor) {
+        record.marker.remove();
+        markers.current.delete(key);
+        record = undefined;
+      }
+      if (!record) {
+        const element = document.createElement("div");
+        element.className = "eli-marker";
+        element.dataset.anchor = anchor;
+        element.dataset.cardId = card?.id ?? "";
+        element.addEventListener("click", () => {
+          const id = element.dataset.cardId;
+          if (id) handlers.current.onSelect(id);
+        });
+        element.addEventListener("mouseenter", () => {
+          const id = element.dataset.cardId;
+          if (id) handlers.current.onHover(id);
+        });
+        element.addEventListener("mouseleave", () => handlers.current.onHover(null));
+        const popup = new Popup({ offset: 14, closeButton: true, maxWidth: "240px" });
+        const marker = new Marker({ element, anchor })
+          .setLngLat([venue.lng, venue.lat])
+          .setPopup(popup)
+          .addTo(map);
+        record = { marker, popup };
+        markers.current.set(key, record);
+      }
+      const element = record.marker.getElement();
+      element.dataset.cardId = card?.id ?? "";
+      if (element.dataset.html !== html) {
+        element.innerHTML = html;
+        element.dataset.html = html;
+      }
+      record.popup.setHTML(body);
+    }
+
+    if (arrived?.venue && venues[arrived.venue]) {
+      const venue = venues[arrived.venue];
+      map.flyTo({
+        center: [venue.lng, venue.lat],
+        curve: 1.4,
+        speed: 0.8,
+      });
+    }
+  }, [cards, hoveredId, ready, selectedId]);
+
+  return <div ref={host} className="campus-map h-full w-full" />;
 }
