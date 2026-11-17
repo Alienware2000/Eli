@@ -8,7 +8,7 @@ import { ChatDock } from "@/components/ChatDock";
 import { Header } from "@/components/Header";
 import { Intro } from "@/components/Intro";
 import { HEADS_UP_ID } from "@/lib/brief";
-import type { Activity, Card } from "@/lib/types";
+import type { Activity, Card, LiveCounts } from "@/lib/types";
 import { matchesFilter, type BoardFilter } from "@/lib/timing";
 
 const CampusMap = dynamic(() => import("@/components/CampusMap"), {
@@ -23,6 +23,7 @@ const CampusMap = dynamic(() => import("@/components/CampusMap"), {
 export function Picture() {
   const [cards, setCards] = useState<Card[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
+  const [counts, setCounts] = useState<LiveCounts | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -47,10 +48,14 @@ export function Picture() {
         ]);
         if (!boardRes.ok || !activityRes.ok) throw new Error("board");
         const board = (await boardRes.json()) as { cards?: Card[] };
-        const feed = (await activityRes.json()) as { activity?: Activity[] };
+        const feed = (await activityRes.json()) as {
+          activity?: Activity[];
+          counts?: LiveCounts | null;
+        };
         if (cancelled) return;
         setCards(Array.isArray(board.cards) ? board.cards : []);
         setActivity(Array.isArray(feed.activity) ? feed.activity : []);
+        setCounts(feed.counts ?? null);
         setReady(true);
         setError(false);
       } catch {
@@ -74,9 +79,12 @@ export function Picture() {
     (card) => card.id !== HEADS_UP_ID && matchesFilter(card, filter),
   );
 
+  const headsUp = cards.find((card) => card.id === HEADS_UP_ID);
+
   return (
-    <div className="board flex h-full min-h-0 flex-col text-ink">
-      <Header />
+    <>
+      <div className="board flex h-full min-h-0 flex-col text-ink" inert={intro ? true : undefined}>
+      <Header counts={counts} />
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(300px,min(400px,38vw))]">
         <div className="relative min-h-0">
           <CampusMap
@@ -101,8 +109,9 @@ export function Picture() {
         />
       </div>
       <ActivityTicker activity={activity} />
-      <ChatDock />
+      <ChatDock headsUp={headsUp} />
+      </div>
       {intro && <Intro onDone={finishIntro} />}
-    </div>
+    </>
   );
 }

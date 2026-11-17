@@ -72,10 +72,11 @@ function minutesOf(clock: unknown): number | null {
 }
 
 export async function readInbox(): Promise<unknown[]> {
+  const started = Date.now();
   try {
     const dir = path.join(process.cwd(), "emails");
     if (!fs.existsSync(dir)) {
-      logActivity("Scout", "no panlist emails on disk");
+      logActivity("Scout", "checking panlists… quiet", Date.now() - started);
       return [];
     }
     const files = fs
@@ -95,18 +96,20 @@ export async function readInbox(): Promise<unknown[]> {
     logActivity(
       "Scout",
       emails.length === 0
-        ? "no panlist emails on disk"
-        : `${emails.length} emails from this week's panlists`,
+        ? "checking panlists… quiet"
+        : `checking panlists… ${emails.length} on the list`,
+      Date.now() - started,
     );
     return emails;
   } catch (error) {
     console.error("read_inbox failed", error);
-    logActivity("Scout", "couldn't read the panlist folder");
+    logActivity("Scout", "checking panlists… couldn't read them", Date.now() - started);
     return [];
   }
 }
 
 export async function getEvents(): Promise<unknown[]> {
+  const started = Date.now();
   try {
     const data = (await fetchJson(
       "https://events.yale.edu/api/2/events?days=7&pp=100",
@@ -144,16 +147,18 @@ export async function getEvents(): Promise<unknown[]> {
           source: "events.yale.edu",
         };
       });
-    logActivity("Vista", `${events.length} events on the calendar`);
+    const tonight = events.filter((event) => event.today).length;
+    logActivity("Vista", `checking the calendar… ${tonight} tonight`, Date.now() - started);
     return events;
   } catch (error) {
     console.error("get_events failed", error);
-    logActivity("Vista", "events feed didn't answer");
+    logActivity("Vista", "checking the calendar… didn't answer", Date.now() - started);
     return [];
   }
 }
 
 export async function getDining(hall?: string): Promise<unknown[]> {
+  const started = Date.now();
   try {
     const schools = (await fetchJson(
       "https://yalehospitality.api.nutrislice.com/menu/api/schools/?format=json",
@@ -222,11 +227,11 @@ export async function getDining(hall?: string): Promise<unknown[]> {
       }),
     );
     const open = rows.filter((row) => row.openNow).length;
-    logActivity("Chef", `${open} halls open now`);
+    logActivity("Chef", `${open} halls open`, Date.now() - started);
     return rows;
   } catch (error) {
     console.error("get_dining failed", error);
-    logActivity("Chef", "dining feed didn't answer");
+    logActivity("Chef", "dining feed didn't answer", Date.now() - started);
     return [];
   }
 }

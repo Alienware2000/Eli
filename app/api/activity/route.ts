@@ -1,17 +1,17 @@
 import { connection } from "next/server";
-import { listActivity } from "@/lib/db";
+import { listActivity, liveCounts } from "@/lib/db";
 
 export async function GET() {
   await connection();
   try {
     return Response.json(
-      { activity: listActivity() },
+      { activity: listActivity(), counts: liveCounts() },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
     console.error("activity read failed", error);
     return Response.json(
-      { activity: [], error: "activity unavailable" },
+      { activity: [], counts: null, error: "activity unavailable" },
       { status: 500, headers: { "Cache-Control": "no-store" } },
     );
   }

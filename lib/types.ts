@@ -55,3 +55,10 @@ export type Activity = {
   text: string;
   ts: string;
 };
+
+export type LiveCounts = {
+  emails: number;
+  events: number;
+  halls: number;
+  lastSweep: string | null;
+};

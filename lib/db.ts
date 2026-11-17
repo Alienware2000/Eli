@@ -3,7 +3,7 @@ import path from "path";
 import Database from "better-sqlite3";
 import { headsUp } from "@/lib/brief";
 import { cardKey, isScoutCard } from "@/lib/identity";
-import type { Activity, Card, PlanStep } from "@/lib/types";
+import type { Activity, Card, LiveCounts, PlanStep } from "@/lib/types";
 
 const dbPath = path.join(process.cwd(), "data", "eli.db");
 
@@ -302,11 +302,54 @@ export function listActivity(): Activity[] {
     .all() as Activity[];
 }
 
-export function logActivity(bot: string, text: string): void {
+function durationLabel(ms: number): string {
+  const seconds = Math.max(0, ms) / 1000;
+  return `${seconds.toFixed(seconds >= 10 ? 0 : 1)}s`;
+}
+
+export function logActivity(bot: string, text: string, ms?: number): void {
   seedIfEmpty();
+  const line = typeof ms === "number" ? `${text} [[${durationLabel(ms)}]]` : text;
   db.prepare("INSERT INTO activity (bot, text, ts) VALUES (?, ?, ?)").run(
     bot,
-    text,
+    line,
     new Date().toISOString(),
   );
+}
+
+function countInbox(): number {
+  const dir = path.join(process.cwd(), "emails");
+  if (!fs.existsSync(dir)) return 0;
+  return fs.readdirSync(dir).filter((file) => /\.(eml|txt|html)$/i.test(file)).length;
+}
+
+function latestFigure(bot: string, pattern: RegExp): number | null {
+  const rows = db
+    .prepare("SELECT text FROM activity WHERE bot = ? ORDER BY id DESC LIMIT 12")
+    .all(bot) as Array<{ text: string }>;
+  for (const row of rows) {
+    const match = row.text.match(pattern);
+    if (match) return Number(match[1]);
+  }
+  return null;
+}
+
+export function liveCounts(): LiveCounts {
+  seedIfEmpty();
+  const events =
+    latestFigure("Vista", /(\d+)\s+tonight/) ??
+    latestFigure("Vista", /(\d+)\s+events/) ??
+    (db.prepare("SELECT COUNT(*) AS n FROM cards WHERE type = 'event'").get() as { n: number }).n;
+  const halls =
+    latestFigure("Chef", /(\d+)\s+halls/) ??
+    (db.prepare("SELECT COUNT(*) AS n FROM cards WHERE type = 'food'").get() as { n: number }).n;
+  const last = db.prepare("SELECT ts FROM activity ORDER BY id DESC LIMIT 1").get() as
+    | { ts: string }
+    | undefined;
+  return {
+    emails: countInbox(),
+    events,
+    halls,
+    lastSweep: last?.ts ?? null,
+  };
 }
