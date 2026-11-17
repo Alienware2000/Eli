@@ -32,6 +32,12 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+.env.local
+
+# ingested panlist mail stays local; committed samples are the exception
+emails/*
+!emails/samples/
+!emails/samples/**
 
 # vercel
 .vercel
