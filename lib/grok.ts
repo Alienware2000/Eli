@@ -179,6 +179,51 @@ type XaiResponse = {
   error?: { message?: string };
 };
 
+export type EliUpdate = { type: "progress"; text: string } | { type: "delta"; text: string };
+
+function progressLine(name: string | undefined, result: unknown): string | null {
+  if (name === "get_events" && Array.isArray(result)) {
+    const tonight = result.filter(
+      (item) => item && typeof item === "object" && Boolean((item as { today?: boolean }).today),
+    ).length;
+    const marked = result.some(
+      (item) => item && typeof item === "object" && "today" in (item as object),
+    );
+    if (result.length === 0 || (marked && tonight === 0)) return "✓ Campus calendar — nothing tonight";
+    return marked
+      ? `✓ Campus calendar — ${tonight} tonight`
+      : `✓ Campus calendar — ${result.length} events`;
+  }
+  if (name === "get_dining" && Array.isArray(result)) {
+    const open = result.filter(
+      (item) => item && typeof item === "object" && Boolean((item as { openNow?: boolean }).openNow),
+    ).length;
+    return `✓ Dining halls — ${open === 1 ? "1 open now" : `${open} open now`}`;
+  }
+  if (name === "read_inbox" && Array.isArray(result)) {
+    if (result.length === 0) return "✓ Your emails — nothing new today";
+    const deadlines = result.filter((item) => {
+      if (!item || typeof item !== "object") return false;
+      const record = item as { subject?: unknown; body?: unknown };
+      const text = `${typeof record.subject === "string" ? record.subject : ""} ${
+        typeof record.body === "string" ? record.body : ""
+      }`;
+      return /deadline|\bdue\b|apply|application|audition/i.test(text);
+    }).length;
+    if (deadlines > 0) {
+      return `✓ Your emails — ${deadlines === 1 ? "1 deadline found" : `${deadlines} deadlines found`}`;
+    }
+    return `✓ Your emails — ${result.length === 1 ? "1 new" : `${result.length} new`}`;
+  }
+  if (name === "web_search") return "✓ Yale web — searched";
+  if (name === "x_search") return "✓ X — searched";
+  return null;
+}
+
+function tell(onEvent: ((update: EliUpdate) => void) | undefined, text: string | null) {
+  if (text) onEvent?.({ type: "progress", text });
+}
+
 function systemPrompt(): string {
   const when = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
@@ -190,34 +235,120 @@ function systemPrompt(): string {
     minute: "2-digit",
   }).format(new Date());
   return [
-    "You are Eli, Yale's campus agent. Speak like a friendly upperclassman: colleges by name, butteries, panlists.",
+    "You are Eli, Yale's campus agent. Speak like a friendly upperclassman: colleges by name, butteries, panlists, suites, Cross Campus, the shuttle.",
     `Right now in New Haven: ${when}.`,
-    "read_inbox is Scout, get_events is Vista, get_dining is Chef. web_search and x_search are you.",
-    "For what is happening on campus, call read_inbox and get_events before you answer. Call get_dining when food, dining, or a free-food night matters.",
-    "Lead with what Scout found in the panlists. Calendar events come second, in the summary and in the cards.",
-    "Then call render_cards once. Put panlist cards before events.yale.edu cards. An inbox card's source must start with \"panlist:\" and include the subject.",
+    "Named workers: read_inbox is Scout, get_events is Vista, get_dining is Chef. web_search and x_search are you, Eli.",
+    "Broad questions — what's happening tonight, what am I missing this week, anything about the whole campus — are a full sweep. Do not stop after one tool.",
+    "On a broad question, consult Scout, Vista, and Chef before any answer. Add web_search or x_search when something people are saying, or a public page, is not already in those three. Live search is in addition to the sweep, never a substitute for it.",
+    "If the turn already includes a finished Scout, Vista, and Chef sweep, do not call those three again. Use the results. Search only if still useful. Then compose.",
+    "Compose at the end: call render_cards once. The summary leads with what IS on — the event, the meal, the deadline, the panlist. An empty source gets at most a secondary clause, never the lead. If Scout found panlist items, those lead and calendar events follow. If Scout is quiet, lead with whichever of Vista or Chef has something on.",
+    "Put panlist cards before events.yale.edu cards. An inbox card's source must start with \"panlist:\" and include the subject.",
     "Only include cards you can source. Copy venue from tool results when it is a key, otherwise null.",
     "freeFood is true only when the source mentions free food, pizza, boba, snacks, refreshments, or dinner provided.",
     "summary is one line. No slogans.",
   ].join(" ");
 }
 
-async function xai(body: Record<string, unknown>, apiKey: string): Promise<XaiResponse> {
+function isBroadQuery(message: string): boolean {
+  const text = message.toLowerCase().replace(/’/g, "'");
+  if (/\bnear\b/.test(text)) return false;
+  return /what(?:'s| is) happening|what am i missing|what(?:'s| is) going on|on campus|\btonight\b|this week/.test(
+    text,
+  );
+}
+
+type Sweep = {
+  inbox: unknown[];
+  events: unknown[];
+  dining: unknown[];
+};
+
+function sweepNote(sweep: Sweep): string {
+  return [
+    "Full sweep is already done. Do not call read_inbox, get_events, or get_dining again.",
+    `Scout read_inbox: ${JSON.stringify(sweep.inbox).slice(0, 18000)}`,
+    `Vista get_events: ${JSON.stringify(sweep.events).slice(0, 24000)}`,
+    `Chef get_dining: ${JSON.stringify(sweep.dining).slice(0, 18000)}`,
+    "Call web_search or x_search only if what people are saying, or a public page, is still missing. Then call render_cards once.",
+    "The summary leads with what is on. An empty source is at most a secondary clause.",
+  ].join("\n");
+}
+
+function textDelta(event: Record<string, unknown>): string | null {
+  if (event.type !== "response.output_text.delta") return null;
+  if (typeof event.delta === "string") return event.delta;
+  if (event.delta && typeof event.delta === "object") {
+    const nested = (event.delta as { text?: unknown }).text;
+    if (typeof nested === "string") return nested;
+  }
+  return null;
+}
+
+async function xai(
+  body: Record<string, unknown>,
+  apiKey: string,
+  onDelta?: (text: string) => void,
+): Promise<XaiResponse> {
   const response = await fetch(ENDPOINT, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({ model: MODEL, tools, ...body }),
+    body: JSON.stringify({ model: MODEL, tools, ...body, stream: true }),
     signal: AbortSignal.timeout(90000),
   });
-  const text = await response.text();
-  if (!response.ok) {
+  if (!response.ok || !response.body) {
+    const text = await response.text();
     console.error("xAI response failed", response.status, text.slice(0, 700));
     throw new Error(`xAI ${response.status}`);
   }
-  return JSON.parse(text) as XaiResponse;
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let raw = "";
+  let completed: XaiResponse | null = null;
+
+  const consume = (block: string) => {
+    for (const line of block.split("\n")) {
+      const trimmed = line.trim();
+      const data = trimmed.startsWith("data:") ? trimmed.slice(5).trim() : trimmed;
+      if (!data.startsWith("{") || data === "[DONE]") continue;
+      let event: Record<string, unknown>;
+      try {
+        event = JSON.parse(data) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      const delta = textDelta(event);
+      if (delta) onDelta?.(delta);
+      if (event.type === "response.completed") {
+        const payload =
+          event.response && typeof event.response === "object" ? event.response : event;
+        completed = payload as XaiResponse;
+      }
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true }).replace(/\r/g, "");
+    raw += chunk;
+    buffer += chunk;
+    let split = buffer.indexOf("\n");
+    while (split !== -1) {
+      consume(buffer.slice(0, split));
+      buffer = buffer.slice(split + 1);
+      split = buffer.indexOf("\n");
+    }
+  }
+  if (buffer.trim()) consume(buffer);
+  if (completed) return completed;
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("{")) return JSON.parse(trimmed) as XaiResponse;
+  throw new Error("xAI stream ended without a response");
 }
 
 function messageText(response: XaiResponse): string {
@@ -236,16 +367,18 @@ function messageText(response: XaiResponse): string {
 
 const seenServerTools = new Set<string>();
 
-function noteServerTools(response: XaiResponse) {
+function noteServerTools(response: XaiResponse, onEvent?: (update: EliUpdate) => void) {
   for (const item of response.output ?? []) {
     const key = item.id ?? `${item.type}:${item.call_id ?? ""}`;
     if (seenServerTools.has(key)) continue;
     if (item.type === "web_search_call" || item.type === "web_search") {
       seenServerTools.add(key);
       logActivity("Eli", "searched the Yale web");
+      tell(onEvent, progressLine("web_search", null));
     } else if (item.type.includes("x_search")) {
       seenServerTools.add(key);
       logActivity("Eli", "searched X");
+      tell(onEvent, progressLine("x_search", null));
     }
   }
 }
@@ -282,6 +415,7 @@ function cleanCard(input: unknown): unknown {
 }
 
 function renderCards(args: Record<string, unknown>): { summary: string; inserted: number } {
+  const started = Date.now();
   const summary = typeof args.summary === "string" ? args.summary.trim() : "";
   const cards = Array.isArray(args.cards) ? args.cards : [];
   let inserted = 0;
@@ -290,12 +424,19 @@ function renderCards(args: Record<string, unknown>): { summary: string; inserted
     if (!card) continue;
     if (insertCard(card)) inserted += 1;
   }
-  logActivity("Eli", inserted === 1 ? "1 card on the board" : `${inserted} cards on the board`);
+  logActivity(
+    "Eli",
+    inserted === 1 ? "1 card on the board" : `${inserted} cards on the board`,
+    Date.now() - started,
+  );
   return { summary, inserted };
 }
 
-async function dispatch(call: OutputItem): Promise<unknown> {
+async function dispatch(call: OutputItem, sweep: Sweep | null): Promise<unknown> {
   const args = argsOf(call);
+  if (sweep && call.name === "read_inbox") return sweep.inbox;
+  if (sweep && call.name === "get_events") return sweep.events;
+  if (sweep && call.name === "get_dining") return sweep.dining;
   switch (call.name) {
     case "read_inbox":
       return readInbox();
@@ -311,24 +452,58 @@ async function dispatch(call: OutputItem): Promise<unknown> {
   }
 }
 
-export async function runEli(message: string): Promise<string> {
+async function speak(text: string, onEvent?: (update: EliUpdate) => void) {
+  if (!onEvent) return;
+  const parts = text.split(/(\s+)/).filter(Boolean);
+  for (const part of parts) {
+    onEvent({ type: "delta", text: part });
+    if (part.trim()) await new Promise((resolve) => setTimeout(resolve, 28));
+  }
+}
+
+export async function runEli(
+  message: string,
+  onEvent?: (update: EliUpdate) => void,
+): Promise<string> {
   const apiKey = process.env.XAI_API_KEY;
   if (!apiKey) throw new Error("missing XAI_API_KEY");
 
   let summary = "";
-  let response = await xai(
-    {
-      input: [
-        { role: "system", content: systemPrompt() },
-        { role: "user", content: message },
-      ],
-    },
-    apiKey,
-  );
+  let streamed = false;
+  const onDelta = (text: string) => {
+    if (!text) return;
+    streamed = true;
+    onEvent?.({ type: "delta", text });
+  };
+  let sweep: Sweep | null = null;
+  const input: Array<{ role: string; content: string }> = [
+    { role: "system", content: systemPrompt() },
+    { role: "user", content: message },
+  ];
+  if (isBroadQuery(message)) {
+    const [inbox, events, dining] = await Promise.all([
+      readInbox().then((rows) => {
+        tell(onEvent, progressLine("read_inbox", rows));
+        return rows;
+      }),
+      getEvents().then((rows) => {
+        tell(onEvent, progressLine("get_events", rows));
+        return rows;
+      }),
+      getDining().then((rows) => {
+        tell(onEvent, progressLine("get_dining", rows));
+        return rows;
+      }),
+    ]);
+    sweep = { inbox, events, dining };
+    input.push({ role: "user", content: sweepNote(sweep) });
+    logActivity("Eli", "composing");
+  }
+  let response = await xai({ input }, apiKey, onDelta);
 
   for (let round = 0; round < 6; round++) {
     if (response.error?.message) throw new Error(response.error.message);
-    noteServerTools(response);
+    noteServerTools(response, onEvent);
     const text = messageText(response);
     if (text) summary = text;
     const calls = (response.output ?? []).filter((item) => item.type === "function_call");
@@ -336,7 +511,11 @@ export async function runEli(message: string): Promise<string> {
 
     const outputs = await Promise.all(
       calls.map(async (call) => {
-        const result = await dispatch(call);
+        const result = await dispatch(call, sweep);
+        const cached =
+          sweep != null &&
+          (call.name === "read_inbox" || call.name === "get_events" || call.name === "get_dining");
+        if (!cached) tell(onEvent, progressLine(call.name, result));
         if (call.name === "render_cards" && result && typeof result === "object" && "summary" in result) {
           const line = (result as { summary?: string }).summary;
           if (line) summary = line;
@@ -348,12 +527,14 @@ export async function runEli(message: string): Promise<string> {
         };
       }),
     );
-    response = await xai({ input: outputs, previous_response_id: response.id }, apiKey);
+    response = await xai({ input: outputs, previous_response_id: response.id }, apiKey, onDelta);
   }
 
   const line = summary
     .split(/\n+/)
     .map((part) => part.trim())
     .find(Boolean);
-  return line || "Here's what I could pull together.";
+  const spoken = line || "Here's what I could pull together.";
+  if (!streamed) await speak(spoken, onEvent);
+  return spoken;
 }
