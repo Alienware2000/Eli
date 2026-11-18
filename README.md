@@ -59,7 +59,7 @@ Grok wasn't just the model in the product; it was the whole pipeline: Grok answe
 
 <img width="643" height="375" alt="image" src="https://github.com/user-attachments/assets/5eab37cc-ff30-477e-b907-78725ba9edbd" />
 <img width="643" height="375" alt="image" src="https://github.com/user-attachments/assets/987e2f72-5022-4b76-adf6-44ef0cdc6a78" />
-<img width="643" height="375" alt="image" src="https://github.com/user-attachments/assets/d04fb4e7-011e-46e7-ba84-f96eaf79c385" />
+<img width="643" height="375" alt="image" src="https://github.com/user-attachments/assets/b151c7d9-e388-4ac2-b35d-fb37d8641314" />
 <img width="643" height="375" alt="image" src="https://github.com/user-attachments/assets/2e615c06-9347-4e98-9110-bc17db7bbe1f" />
 
 ## Running it
