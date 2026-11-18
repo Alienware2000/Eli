@@ -58,7 +58,7 @@ Stack: Next.js · TypeScript · Tailwind · MapLibre GL (3D) · SQLite · xAI Re
 Grok wasn't just the model in the product; it was the whole pipeline: Grok answered every query, Grok (in Cursor) wrote the code, and a Grok Bot collected the email corpus.
 
 <img width="643" height="375" alt="image" src="https://github.com/user-attachments/assets/5eab37cc-ff30-477e-b907-78725ba9edbd" />
-<img width="643" height="375" alt="image" src="https://github.com/user-attachments/assets/987e2f72-5022-4b76-adf6-44ef0cdc6a78" />
+<img width="643" height="375" alt="image" src="https://github.com/user-attachments/assets/66233e60-d652-449e-9acf-f19c88892099" />
 <img width="643" height="375" alt="image" src="https://github.com/user-attachments/assets/b151c7d9-e388-4ac2-b35d-fb37d8641314" />
 <img width="643" height="375" alt="image" src="https://github.com/user-attachments/assets/2e615c06-9347-4e98-9110-bc17db7bbe1f" />
 
