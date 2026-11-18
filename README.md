@@ -4,6 +4,8 @@
 
 > 🎥 **[Demo video](https://drive.google.com/drive/folders/1ENmrt1szIr57BmfmQYwb4SDtri4k8Jf8)** · Built in 4 hours with Grok at the y/CS × SpaceXSI Grokathon · Nov 17, 2026, Tsai CITY
 
+<img width="1498" height="793" alt="image" src="https://github.com/user-attachments/assets/e8df13d3-e400-4ba1-80d2-8547f18f7557" />
+
 <img width="1498" height="793" alt="image" src="https://github.com/user-attachments/assets/7c27ccd6-b830-426d-81b3-f7559189e3eb" />
 
 
