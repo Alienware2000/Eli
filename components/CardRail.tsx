@@ -76,7 +76,7 @@ export function CardRail({
   }, [selectedId]);
 
   return (
-    <aside className="flex h-full min-h-0 flex-col border-l border-white/7 bg-base">
+    <aside className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-white/7 bg-base">
       <div className="px-4 pt-4 pb-3">
         <div className="flex items-baseline justify-between">
           <h2 className="text-[16px] font-semibold tracking-tight text-ink">Right now</h2>
@@ -95,7 +95,7 @@ export function CardRail({
           ))}
         </div>
       </div>
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pt-1 pb-8">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto px-4 pt-1 pb-8">
         {!ready && !error && <p className="text-[13px] text-muted">sniffing the panlists…</p>}
         {error && cards.length === 0 && (
           <p className="text-[13px] text-muted">Lost that one in the stacks. Try again.</p>
@@ -163,7 +163,7 @@ function CardArticle({
           onSelect(card.id);
           onToggle();
         }}
-        className="block w-full text-left"
+        className="block w-full min-w-0 text-left"
       >
         <div className="flex items-center justify-between gap-2">
           <span className="text-[11px] tracking-[0.14em] text-muted uppercase">
@@ -177,7 +177,7 @@ function CardArticle({
         <CardBody card={card} />
         <p className="source-block">
           <span className="tracking-[0.14em] uppercase">Source</span>
-          <span className="mt-1 block">{card.source}</span>
+          <span className="source-text">{card.source}</span>
         </p>
       </button>
       {open && <Receipt id={card.id} />}

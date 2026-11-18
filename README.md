@@ -1,63 +1,61 @@
-# ELI — Yale, right now.
+# ELI — the intelligence layer for Yale
 
-**Every week, Yale happens and you miss most of it. Eli notices for you.**
+**Yale has a decade of data infrastructure. What's missing is intelligence. Eli is that layer.**
 
-Eli is Yale's campus agent. A small team of Grok workers reads the panlists, the public events calendar, and the dining halls, and keeps one live map of campus. The board is already up when you arrive. Ask what's happening, what's free, what's still open, or what you're about to miss — Eli answers in one line, and the map fills in behind it.
+> 🎥 **[Demo video](https://drive.google.com/drive/folders/1ENmrt1szIr57BmfmQYwb4SDtri4k8Jf8)** · Built in 4 hours with Grok at the y/CS × SpaceXSI Grokathon · Nov 17, 2026, Tsai CITY
 
-Built in four hours at the y/CS × SpaceXSI Grokathon, November 17, 2026, Tsai CITY.
+![Eli — Yale, right now](docs/screenshot-board.png)
 
-## The problem
+## The thesis
 
-Discovery at Yale is scattered. Events, parties, free food, research gigs, auditions, and application deadlines live in panlist emails nobody opens, on YaleConnect, and on posters. Every Yalie has a story about the thing they found out about the day after.
+Yale is one of the most instrumented campuses anywhere: official APIs for events and dining, and a decade of student-built tools organizing the rest — courses, people, meals, degrees — one vertical at a time.
 
-Student tools have fixed this one vertical at a time — courses, dining, the directory — by taking Yale's public data and giving it a better interface. Nothing does it across campus life, and nothing reads the panlists for you.
+But all of it is data you consult. Nothing reads it for you, and nothing reasons across it. A question as simple as **"what am I missing this week?"** has no home, because the answer lives across an events feed, fifteen dining halls, and forty unread club emails at once.
 
-## The board
+Every layer of the stack exists except the top one. Eli is the top: **one agent with eyes on every feed.**
 
-One surface. The map and the rail are the same cards. The rail filters are **All**, **Tonight**, **Free food**, **Open now**, and **Deadlines**.
+## The proof: campus life
 
-| Lens | Card | Where it comes from |
+We pointed the layer at the problem every Yalie feels daily. Events, free food, research gigs, and deadlines are scattered across club mailing-list emails, YaleConnect, and posters — and mostly missed.
+
+Eli reads it all and keeps one living picture of Yale:
+
+| Lens | Question | Source |
 |---|---|---|
-| Events | `event` | **Vista** pulls the next 7 days from [events.yale.edu](https://events.yale.edu). **Scout** reads panlist mail for the things that never make the calendar. |
-| Free food | `event` with `freeFood` | A mention of free food, pizza, boba, snacks, refreshments, or dinner provided. Those pins pulse amber. |
-| Dining | `food` | **Chef** reads Yale Hospitality on Nutrislice: which halls are inside a meal window, and what's on tonight's dinner line. Open halls glow. |
-| Deadlines | `opp` | The same panlist pass — research gigs, auditions, club applications, anything with a close date. |
-| Pulse | `pulse` | Eli's own web search, limited to yale.edu, events.yale.edu, yaleconnect.yale.edu, and yaledailynews.com, plus X search. Citations stay on the card. |
-| A plan | `plan` | A composed evening: timed steps, each with a place. |
+| **Events** | What's happening tonight? | events.yale.edu + club emails |
+| **Free food** | Where's free food right now? | Email extraction |
+| **Dining** | What's open, what's for dinner? | Yale Hospitality (Nutrislice) |
+| **Opportunities** | What's closing — gigs, auditions, apps? | Email extraction |
+| **Pulse** | What's campus talking about? | Grok's X + web search, Yale-pinned |
 
-A **Heads up** card sits above the rail and is written from the board itself: tonight's event, the deadline closing soonest, and the nearest free food. It updates as cards arrive.
+The surface is a live 3D map of campus: pins brighten as events approach, open dining halls glow, free food pulses amber, and a **Heads up** brief composes itself from whatever matters most. The board is full before you ask — chat is just your lens on it.
 
-The map is MapLibre, pitched over central campus, with college names and a "you" pin. Cards share a venue key with `data/venues.json`, so a buttery, a college, and a calendar pin land on the same building. Happening-now pins glow, ended pins fade, and free food stays amber. A popup includes the walk in minutes. Select a pin or a card and the other follows. Open a card and the receipt is the original panlist text, or the event or citation URL.
-
-Under the map, a ticker names the worker and the call as it happens: Scout, Vista, Chef, Eli. Click it for the work log. The header counts emails on disk, the last calendar sweep, and open halls. The chips under the bar come from the Heads-up card, the time of day, "What am I missing this week?", and "How do I…?".
-
-On a fresh database the board opens with a walk-up set, so the map is already full. Ask a question and live cards land beside it. Panlist cards sort first.
-
-## How it works
-
-Eli is the coordinator. Scout, Vista, and Chef fetch. Grok decides who to call, and the only way onto the board is a strict card schema.
+## Built on Grok
 
 ```
-you ──▶ chat dock
-          │
-          ▼
-    /api/chat ──▶ Grok 4.7  (xAI Responses API)
-          │         ├─ web_search   four Yale domains
-          │         ├─ x_search
-          │         ├─ read_inbox()   Scout   emails/*.eml, .txt, .html
-          │         ├─ get_events()   Vista   events.yale.edu
-          │         └─ get_dining()   Chef    Nutrislice
-          ▼
-    render_cards()  — five card types, extra fields rejected
-          ▼
-    SQLite ──▶ /api/board and /api/activity, polled every 2 seconds
-          ▼
-    map + rail + ticker
+you ──▶ command bar / suggestion chips
+            │
+            ▼
+      /api/chat ──▶ Grok (xAI Responses API)
+            │         ├─ web_search · x_search (server-side, Yale-pinned)
+            │         ├─ read_inbox()  ← org emails      [Scout]
+            │         ├─ get_events()  ← events.yale.edu [Vista]
+            │         └─ get_dining()  ← Nutrislice      [Chef]
+            ▼
+      render_cards() — strict JSON schema, 5 card types
+            ▼
+      SQLite ──▶ live 3D map + card rail + activity ticker
 ```
 
-The loop runs for up to six rounds. Cards that miss the schema are dropped. A panlist card's source has to name the file and the subject, and opening it loads that email. A calendar, dining, or news card opens its URL. Tool calls are logged and streamed on the ticker as named workers ("Scout: 12 emails from this week's panlists", "Chef: 6 halls open now").
+- **Grok is the brain.** Every card and every extraction is Grok doing agentic tool-calling; its built-in server-side X and web search is why this took four hours, not four weeks.
+- **Observability is first-class.** Every tool call is logged and streamed. Each answer comes with a receipt — *"✓ Campus calendar — 30 tonight · ✓ Your emails — 2 deadlines found"* — and every card opens to its raw source. Nothing exists on the board without one.
+- **Grok Bot in the pipeline.** The email corpus was collected by a Grok Bot sweeping the author's inbox for org mail.
 
-Stack: Next.js, TypeScript, Tailwind, MapLibre GL, SQLite (`better-sqlite3`), xAI Responses API (`grok-4.7`). Built with Cursor, running Grok.
+Stack: Next.js · TypeScript · Tailwind · MapLibre GL (3D) · SQLite · xAI Responses API · built in Cursor running Grok.
+
+## Screenshots — Grok end to end
+
+Grok wasn't just the model in the product; it was the whole pipeline: Grok answered every query, Grok (in Cursor) wrote the code, and a Grok Bot collected the email corpus.
 
 ## Running it
 
@@ -68,20 +66,16 @@ cp emails/samples/*.txt emails/
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Scout reads `.eml`, `.txt`, and `.html` files in the top of `emails/`. The copy puts the committed samples where Scout can see them. Real emails dropped in that same folder are gitignored. `npm run dev` is the dev script in `package.json`.
 
-Scout reads `.eml`, `.txt`, and `.html` files in the top of `emails/` (up to 40). The committed examples live in `emails/samples/` and stay there until you copy them up. Real panlist exports dropped in `emails/` are gitignored. The samples are invented notes in the shape of a Yale panlist: a free-food night, a research-assistant deadline, and a club application deadline.
+## Next
 
-`package.json` also has `build`, `start`, and `lint`. The demo loop is `npm run dev`.
+1. **Your inbox, with permission** — your mailing lists already describe your campus life; Eli reads them as you.
+2. **Proactive Eli** — a Grok Bot routine that texts you each morning: tonight's thing, the closing deadline, the free food.
+3. **Every system, one more tool** — the whole student-built stack becomes tools the layer reasons over.
 
-## What's next
-
-- **Your inbox, with your permission.** The panlists you already subscribe to describe your campus life better than a profile form. Next is reading them as you, so "what am I missing" means missing for you.
-- **A morning note.** Tonight's thing you'd care about, the deadline sneaking up, and where the free food is.
-- **Eli on other surfaces.** A Grok Bot you can text from your phone, posting onto this same board, and a spotlight-bar extension in the BetterCampus vein.
+The infrastructure exists. Now it can think.
 
 ## Credits
 
-- The pattern of named bots operating one live surface is inspired by [Hyperpolymath](https://github.com/filippo-fonseca/hyperpolymath-v3) by Filippo Fonseca.
-- Data: Yale's public events calendar (Localist, at events.yale.edu), Yale Hospitality menus (Nutrislice), and the panlists of Yale's student organizations.
-- Built by David Antwi (Yale EECS '28), also a developer on YaleMeals via the Yale Computer Society.
+Architecture pattern (bots operating a live surface) inspired by [Hyperpolymath](https://github.com/filippo-fonseca/hyperpolymath-v3) by Filippo Fonseca. Data: Yale's public events calendar, Yale Hospitality menus, and the mailing lists of Yale's student organizations. Built by David Antwi, Yale EECS '28.

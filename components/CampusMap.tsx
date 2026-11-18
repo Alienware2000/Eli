@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  AttributionControl,
+  LngLatBounds,
   Map as MlMap,
   Marker,
   NavigationControl,
@@ -170,6 +172,7 @@ export default function CampusMap({
   const mapRef = useRef<MlMap | null>(null);
   const markers = useRef(new Map<string, { marker: Marker; popup: Popup }>());
   const seen = useRef<Set<string> | null>(null);
+  const framed = useRef("");
   const handlers = useRef<Handlers>({ onSelect, onHover });
   const [ready, setReady] = useState(false);
   handlers.current = { onSelect, onHover };
@@ -190,8 +193,9 @@ export default function CampusMap({
         [-72.945, 41.3],
         [-72.912, 41.322],
       ],
-      attributionControl: { compact: true },
+      attributionControl: false,
     });
+    map.addControl(new AttributionControl({ compact: false }), "bottom-left");
     map.addControl(new NavigationControl({ showCompass: false }), "top-right");
 
     const you = document.createElement("div");
@@ -251,15 +255,14 @@ export default function CampusMap({
     const map = mapRef.current;
     if (!map || !ready) return;
 
-    let arrived: Card | null = null;
+    let frame = false;
     if (seen.current === null) {
       seen.current = new Set(cards.map((card) => card.id));
+      frame = cards.some((card) => card.venue && venues[card.venue]);
     } else {
-      const fresh = cards
-        .filter((card) => !seen.current?.has(card.id) && card.venue && venues[card.venue])
-        .sort((a, b) => (a.ts < b.ts ? 1 : -1));
+      const fresh = cards.filter((card) => !seen.current?.has(card.id));
       for (const card of cards) seen.current.add(card.id);
-      arrived = fresh[0] ?? null;
+      frame = fresh.length > 0;
     }
 
     const byVenue = new Map<string, Card[]>();
@@ -328,12 +331,20 @@ export default function CampusMap({
       record.popup.setHTML(body);
     }
 
-    if (arrived?.venue && venues[arrived.venue]) {
-      const venue = venues[arrived.venue];
-      map.flyTo({
-        center: [venue.lng, venue.lat],
-        curve: 1.4,
-        speed: 0.8,
+    if (frame && byVenue.size > 0) {
+      const first = framed.current === "";
+      framed.current = "set";
+      const bounds = new LngLatBounds();
+      for (const key of byVenue.keys()) {
+        const venue = venues[key];
+        if (venue) bounds.extend([venue.lng, venue.lat]);
+      }
+      map.fitBounds(bounds, {
+        padding: { top: 48, right: 28, bottom: 148, left: 24 },
+        pitch: map.getPitch() || 55,
+        bearing: map.getBearing(),
+        maxZoom: 16.2,
+        duration: first ? 0 : 800,
       });
     }
   }, [cards, hoveredId, ready, selectedId]);

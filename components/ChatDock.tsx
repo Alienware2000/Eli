@@ -155,7 +155,7 @@ export function ChatDock({ headsUp }: { headsUp?: Card }) {
       }}
     >
       {(lastYou || lastEli || busy) && (
-        <div ref={logRef} className="max-h-44 space-y-1.5 overflow-y-auto border-b border-white/[0.07] px-4 py-3">
+        <div ref={logRef} className="command-log space-y-1.5 border-b border-white/[0.07] px-4 py-3">
           {lastYou && (
             <p className="text-[13px] leading-5 text-muted">
               <span className="mr-2 text-[11px] tracking-wide text-muted uppercase">You</span>
@@ -181,7 +181,7 @@ export function ChatDock({ headsUp }: { headsUp?: Card }) {
           )}
         </div>
       )}
-      <div className="flex items-center gap-2 px-4 py-3">
+      <div className="command-input flex items-center gap-2 px-4 py-3">
         <input
           ref={inputRef}
           value={draft}

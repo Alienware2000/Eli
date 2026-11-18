@@ -85,8 +85,8 @@ export function Picture() {
     <>
       <div className="board flex h-full min-h-0 flex-col text-ink" inert={intro ? true : undefined}>
       <Header counts={counts} />
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(300px,min(400px,38vw))]">
-        <div className="relative min-h-0">
+      <div className="stage">
+        <div className="map-pane">
           <CampusMap
             key={layoutNonce}
             cards={visible}
