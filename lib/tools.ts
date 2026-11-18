@@ -71,6 +71,20 @@ function minutesOf(clock: unknown): number | null {
   return h * 60 + m;
 }
 
+const DATED =
+  /deadline|\bdue\b|apply|application|audition|tonight|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}:\d{2}|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i;
+
+function emailExcerpt(raw: string): string {
+  const text = raw
+    .replace(/<[^>]+>/g, " ")
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const sentences = text.split(/(?<=[.!?])\s+/).filter((sentence) => sentence.length > 20);
+  const dated = sentences.filter((sentence) => DATED.test(sentence));
+  return (dated.length > 0 ? dated : sentences).slice(0, 3).join(" ").slice(0, 480);
+}
+
 export async function readInbox(): Promise<unknown[]> {
   const started = Date.now();
   try {
@@ -81,17 +95,19 @@ export async function readInbox(): Promise<unknown[]> {
     }
     const files = fs
       .readdirSync(dir)
-      .filter((file) => /\.(eml|txt|html)$/i.test(file));
-    const emails = files.slice(0, 40).map((file) => {
+      .filter((file) => /\.(eml|txt|html)$/i.test(file))
+      .slice(0, 40);
+    const emails = files.map((file) => {
       const raw = fs.readFileSync(path.join(dir, file), "utf8");
       const subject = raw.match(/^Subject:\s*(.+)$/im)?.[1]?.trim() ?? file;
       const split = raw.split(/\r?\n\r?\n/);
-      const body = (split.length > 1 ? split.slice(1).join("\n\n") : raw)
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 4000);
-      return { file, subject, body, source: `panlist: ${file} — subject: ${subject}` };
+      const prose = split.length > 1 ? split.slice(1).join("\n\n") : raw;
+      return {
+        file,
+        subject,
+        body: emailExcerpt(prose),
+        source: `panlist: ${file} — subject: ${subject}`,
+      };
     });
     logActivity(
       "Scout",

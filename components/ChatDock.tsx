@@ -11,6 +11,13 @@ type Message = {
 
 const FALLBACK = "Lost that one in the stacks. Try again.";
 
+function joinChat(current: string, next: string): string {
+  if (!current) return next;
+  if (!next) return current;
+  if (/[.!?]["']?$/.test(current) && /^[A-Za-z]/.test(next)) return `${current} ${next}`;
+  return current + next;
+}
+
 const REST_PLACEHOLDER = "Ask about a college, a deadline, a buttery…";
 const HOW_PLACEHOLDER = "how do I drop a class, book a room, find my dean…";
 
@@ -116,7 +123,7 @@ export function ChatDock({ headsUp }: { headsUp?: Card }) {
             continue;
           }
           if (event.type === "progress" && event.text) steps.push(event.text);
-          else if (event.type === "delta" && event.text) reply += event.text;
+          else if (event.type === "delta" && event.text) reply = joinChat(reply, event.text);
           else if (event.type === "done" && !reply.trim() && event.text) reply = event.text;
           paint();
         }
@@ -168,7 +175,7 @@ export function ChatDock({ headsUp }: { headsUp?: Card }) {
             </p>
           ))}
           {lastEli?.text ? (
-            <p className="text-[13px] leading-5 text-ink">
+            <p className="whitespace-pre-wrap text-[13px] leading-5 text-ink">
               <span className="mr-2 text-[11px] tracking-wide text-muted uppercase">Eli</span>
               {lastEli.text}
               {busy && <span className="type-caret" aria-hidden="true" />}

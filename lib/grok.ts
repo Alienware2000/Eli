@@ -148,7 +148,7 @@ const tools = [
     name: "render_cards",
     strict: true,
     description:
-      "Put cards on Eli's board. Call this once when you have enough to answer. venue is a venues.json key copied from tool results, or null. summary is one spoken line for the chat.",
+      "Put cards on the board. The board is the answer. summary is the chat pointer: at most 3 short sentences, no dates, places, or deadlines narrated in prose. Deadlines are opp cards, events are event cards, hours-and-place facts are pulse cards. Two or more dated items means cards are required.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -237,15 +237,18 @@ function systemPrompt(): string {
   return [
     "You are Eli, Yale's campus agent. Speak like a friendly upperclassman: colleges by name, butteries, panlists, suites, Cross Campus, the shuttle.",
     `Right now in New Haven: ${when}.`,
+    "The board is the answer. The chat is only a short pointer to the board.",
+    "Chat summary hard rules: at most 3 short sentences, conversational, no wall of text, never repeat a point.",
+    "Any item with a date, a place, or a deadline is not narrated in prose. It becomes a card via render_cards. Deadlines become opp cards. Events become event cards. A fact with hours and a place, such as registrar help at Poorvu 9:30–11:30, becomes a pulse card.",
+    "If an answer would contain 2 or more dated items, cards are mandatory and prose summaries of those items are forbidden.",
+    "The chat line only points. Example: Registration windows are the clock this week — I've pinned the dates and the registrar's help hours to the board.",
     "Named workers: read_inbox is Scout, get_events is Vista, get_dining is Chef. web_search and x_search are you, Eli.",
     "Broad questions — what's happening tonight, what am I missing this week, anything about the whole campus — are a full sweep. Do not stop after one tool.",
     "On a broad question, consult Scout, Vista, and Chef before any answer. Add web_search or x_search when something people are saying, or a public page, is not already in those three. Live search is in addition to the sweep, never a substitute for it.",
-    "If the turn already includes a finished Scout, Vista, and Chef sweep, do not call those three again. Use the results. Search only if still useful. Then compose.",
-    "Compose at the end: call render_cards once. The summary leads with what IS on — the event, the meal, the deadline, the panlist. An empty source gets at most a secondary clause, never the lead. If Scout found panlist items, those lead and calendar events follow. If Scout is quiet, lead with whichever of Vista or Chef has something on.",
-    "Put panlist cards before events.yale.edu cards. An inbox card's source must start with \"panlist:\" and include the subject.",
+    "If the turn already includes a finished Scout, Vista, and Chef sweep, do not call those three again. Use the results. If Scout returned any emails, the panlist is not empty. Card the ones with dates, deadlines, or places, and put those panlist cards first.",
+    "Compose at the end: call render_cards once. An inbox card's source must start with \"panlist:\" and include the subject.",
     "Only include cards you can source. Copy venue from tool results when it is a key, otherwise null.",
     "freeFood is true only when the source mentions free food, pizza, boba, snacks, refreshments, or dinner provided.",
-    "summary is one line. No slogans.",
   ].join(" ");
 }
 
@@ -263,15 +266,40 @@ type Sweep = {
   dining: unknown[];
 };
 
+function fitList(rows: unknown[], max: number): string {
+  if (JSON.stringify(rows).length <= max) return JSON.stringify(rows);
+  let count = rows.length;
+  while (count > 1 && JSON.stringify(rows.slice(0, count)).length > max) count -= 1;
+  return JSON.stringify(rows.slice(0, count));
+}
+
 function sweepNote(sweep: Sweep): string {
+  const inboxCount = sweep.inbox.length;
   return [
     "Full sweep is already done. Do not call read_inbox, get_events, or get_dining again.",
-    `Scout read_inbox: ${JSON.stringify(sweep.inbox).slice(0, 18000)}`,
-    `Vista get_events: ${JSON.stringify(sweep.events).slice(0, 24000)}`,
-    `Chef get_dining: ${JSON.stringify(sweep.dining).slice(0, 18000)}`,
+    inboxCount === 0
+      ? "Scout read_inbox returned no emails."
+      : `Scout read_inbox returned ${inboxCount} emails. The panlist is not empty. Card every email that has a date, a deadline, or a place.`,
+    `Scout read_inbox: ${fitList(sweep.inbox, 28000)}`,
+    `Vista get_events: ${fitList(sweep.events, 20000)}`,
+    `Chef get_dining: ${fitList(sweep.dining, 12000)}`,
     "Call web_search or x_search only if what people are saying, or a public page, is still missing. Then call render_cards once.",
-    "The summary leads with what is on. An empty source is at most a secondary clause.",
+    "Chat summary: at most 3 short sentences, and it must not retell the dates. Those belong on cards.",
   ].join("\n");
+}
+
+export function shapeReply(raw: string): string {
+  const spaced = raw.replace(/([.!?])(?=[A-Za-z])/g, "$1 ").replace(/[ \t]+\n/g, "\n").trim();
+  const sentences: string[] = [];
+  for (const chunk of spaced.split(/\n+/)) {
+    for (const sentence of chunk.split(/(?<=[.!?])\s+/)) {
+      const line = sentence.trim();
+      if (!line) continue;
+      sentences.push(line);
+      if (sentences.length === 3) return sentences.join("\n");
+    }
+  }
+  return sentences.join("\n");
 }
 
 function textDelta(event: Record<string, unknown>): string | null {
@@ -416,7 +444,7 @@ function cleanCard(input: unknown): unknown {
 
 function renderCards(args: Record<string, unknown>): { summary: string; inserted: number } {
   const started = Date.now();
-  const summary = typeof args.summary === "string" ? args.summary.trim() : "";
+  const summary = shapeReply(typeof args.summary === "string" ? args.summary : "");
   const cards = Array.isArray(args.cards) ? args.cards : [];
   let inserted = 0;
   for (const raw of cards) {
@@ -469,12 +497,7 @@ export async function runEli(
   if (!apiKey) throw new Error("missing XAI_API_KEY");
 
   let summary = "";
-  let streamed = false;
-  const onDelta = (text: string) => {
-    if (!text) return;
-    streamed = true;
-    onEvent?.({ type: "delta", text });
-  };
+  let cardSummary = "";
   let sweep: Sweep | null = null;
   const input: Array<{ role: string; content: string }> = [
     { role: "system", content: systemPrompt() },
@@ -499,7 +522,7 @@ export async function runEli(
     input.push({ role: "user", content: sweepNote(sweep) });
     logActivity("Eli", "composing");
   }
-  let response = await xai({ input }, apiKey, onDelta);
+  let response = await xai({ input }, apiKey);
 
   for (let round = 0; round < 6; round++) {
     if (response.error?.message) throw new Error(response.error.message);
@@ -518,7 +541,7 @@ export async function runEli(
         if (!cached) tell(onEvent, progressLine(call.name, result));
         if (call.name === "render_cards" && result && typeof result === "object" && "summary" in result) {
           const line = (result as { summary?: string }).summary;
-          if (line) summary = line;
+          if (line) cardSummary = line;
         }
         return {
           type: "function_call_output",
@@ -527,14 +550,10 @@ export async function runEli(
         };
       }),
     );
-    response = await xai({ input: outputs, previous_response_id: response.id }, apiKey, onDelta);
+    response = await xai({ input: outputs, previous_response_id: response.id }, apiKey);
   }
 
-  const line = summary
-    .split(/\n+/)
-    .map((part) => part.trim())
-    .find(Boolean);
-  const spoken = line || "Here's what I could pull together.";
-  if (!streamed) await speak(spoken, onEvent);
+  const spoken = shapeReply(cardSummary || summary) || "Here's what I pinned to the board.";
+  await speak(spoken, onEvent);
   return spoken;
 }
