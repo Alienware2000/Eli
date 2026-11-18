@@ -4,7 +4,8 @@
 
 > 🎥 **[Demo video](https://drive.google.com/drive/folders/1ENmrt1szIr57BmfmQYwb4SDtri4k8Jf8)** · Built in 4 hours with Grok at the y/CS × SpaceXSI Grokathon · Nov 17, 2026, Tsai CITY
 
-![Eli — Yale, right now](docs/screenshot-board.png)
+<img width="1498" height="793" alt="image" src="https://github.com/user-attachments/assets/7c27ccd6-b830-426d-81b3-f7559189e3eb" />
+
 
 ## The thesis
 
