@@ -21,6 +21,10 @@ const LABELS: Record<Card["type"], string> = {
   opp: "Deadline",
 };
 
+function readableSource(source: string): string {
+  return source.replace(/^panlist:\s*/i, "email · ").replace(/\s— subject:\s*/i, " — ");
+}
+
 type SourceView =
   | { kind: "email"; text: string }
   | { kind: "url"; href: string; label: string }
@@ -96,7 +100,7 @@ export function CardRail({
         </div>
       </div>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto px-4 pt-1 pb-8">
-        {!ready && !error && <p className="text-[13px] text-muted">sniffing the panlists…</p>}
+        {!ready && !error && <p className="text-[13px] text-muted">reading campus emails…</p>}
         {error && cards.length === 0 && (
           <p className="text-[13px] text-muted">Lost that one in the stacks. Try again.</p>
         )}
@@ -166,18 +170,18 @@ function CardArticle({
         className="block w-full min-w-0 text-left"
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] tracking-[0.14em] text-muted uppercase">
+          <span className="type-label">
             {card.id === HEADS_UP_ID ? "Eli" : LABELS[card.type]}
           </span>
           {card.type === "event" && card.freeFood && (
-            <span className="text-[11px] tracking-wide text-amber uppercase">Free food</span>
+            <span className="type-label text-amber">Free food</span>
           )}
         </div>
-        <h3 className="mt-2 text-[16px] leading-normal font-semibold text-ink">{card.title}</h3>
+        <h3 className="mt-2 text-[17px] leading-snug font-semibold text-ink">{card.title}</h3>
         <CardBody card={card} />
         <p className="source-block">
           <span className="tracking-[0.14em] uppercase">Source</span>
-          <span className="source-text">{card.source}</span>
+          <span className="source-text">{readableSource(card.source)}</span>
         </p>
       </button>
       {open && <Receipt id={card.id} />}
@@ -260,7 +264,7 @@ function CardBody({ card }: { card: Card }) {
     <ol className="mt-3 space-y-2 border-l border-white/10 pl-3">
       {card.steps.map((step) => (
         <li key={`${step.time}-${step.what}`}>
-          <p className="font-mono text-[11px] text-accent">{step.time}</p>
+          <p className="step-tag">{step.time}</p>
           <p className="text-[13px] text-ink">{step.what}</p>
           <p className="text-[12px] text-muted">{step.where}</p>
         </li>

@@ -165,7 +165,7 @@ export function ChatDock({ headsUp }: { headsUp?: Card }) {
         <div ref={logRef} className="command-log space-y-1.5 border-b border-white/[0.07] px-4 py-3">
           {lastYou && (
             <p className="text-[13px] leading-5 text-muted">
-              <span className="mr-2 text-[11px] tracking-wide text-muted uppercase">You</span>
+              <span className="mr-2 text-[11px] text-muted">You</span>
               {lastYou.text}
             </p>
           )}
@@ -175,8 +175,8 @@ export function ChatDock({ headsUp }: { headsUp?: Card }) {
             </p>
           ))}
           {lastEli?.text ? (
-            <p className="whitespace-pre-wrap text-[13px] leading-5 text-ink">
-              <span className="mr-2 text-[11px] tracking-wide text-muted uppercase">Eli</span>
+            <p className="whitespace-pre-wrap text-[13px] leading-6 text-ink">
+              <span className="mr-2 text-[11px] text-muted">Eli</span>
               {lastEli.text}
               {busy && <span className="type-caret" aria-hidden="true" />}
             </p>

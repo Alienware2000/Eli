@@ -14,8 +14,8 @@ import { matchesFilter, type BoardFilter } from "@/lib/timing";
 const CampusMap = dynamic(() => import("@/components/CampusMap"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-full items-center justify-center bg-base font-mono text-[13px] text-muted">
-      sniffing the panlists…
+    <div className="flex h-full items-center justify-center bg-base text-[13px] text-muted">
+      reading campus emails…
     </div>
   ),
 });
@@ -87,6 +87,14 @@ export function Picture() {
       <Header counts={counts} />
       <div className="stage">
         <div className="map-pane">
+          <div className="map-key" aria-hidden="true">
+            <span><i className="kind-now" /> Tonight</span>
+            <span><i className="kind-soon" /> Soon</span>
+            <span><i className="kind-food" /> Free food</span>
+            <span><i className="kind-open" /> Open now</span>
+            <span><i className="kind-due" /> Deadline</span>
+            <span><i className="kind-week" /> Later</span>
+          </div>
           <CampusMap
             key={layoutNonce}
             cards={visible}

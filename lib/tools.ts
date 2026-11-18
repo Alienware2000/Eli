@@ -90,7 +90,7 @@ export async function readInbox(): Promise<unknown[]> {
   try {
     const dir = path.join(process.cwd(), "emails");
     if (!fs.existsSync(dir)) {
-      logActivity("Scout", "checking panlists… quiet", Date.now() - started);
+      logActivity("Scout", "reading campus emails… nothing new", Date.now() - started);
       return [];
     }
     const files = fs
@@ -112,14 +112,14 @@ export async function readInbox(): Promise<unknown[]> {
     logActivity(
       "Scout",
       emails.length === 0
-        ? "checking panlists… quiet"
-        : `checking panlists… ${emails.length} on the list`,
+        ? "reading campus emails… nothing new"
+        : `read ${emails.length} campus emails`,
       Date.now() - started,
     );
     return emails;
   } catch (error) {
     console.error("read_inbox failed", error);
-    logActivity("Scout", "checking panlists… couldn't read them", Date.now() - started);
+    logActivity("Scout", "couldn't read the campus emails", Date.now() - started);
     return [];
   }
 }

@@ -195,7 +195,7 @@ const SEED_CARDS: Card[] = [
 const SEED_ACTIVITY: Array<Omit<Activity, "id">> = [
   {
     bot: "Scout",
-    text: "14 events from this week's panlists",
+    text: "14 events from this week's campus emails",
     ts: "2026-11-17T21:40:00.000Z",
   },
   {

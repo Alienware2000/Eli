@@ -57,9 +57,13 @@ function actionFor(worker: string, result: string): string {
   return "note";
 }
 
+function spoken(result: string): string {
+  return result.replace(/panlists/gi, "campus emails").replace(/panlist/gi, "campus email");
+}
+
 export function logLine(row: Activity): LogLine {
   const timed = row.text.match(DURATION);
-  const result = (timed?.[1] ?? row.text).trim();
+  const result = spoken((timed?.[1] ?? row.text).trim());
   return {
     id: row.id,
     ts: row.ts,

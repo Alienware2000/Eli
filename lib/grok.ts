@@ -111,7 +111,7 @@ const tools = [
     type: "function",
     name: "read_inbox",
     description:
-      "Scout. Read the local panlist and club emails exported into emails/. Returns subject and body text. No mailbox login.",
+      "Scout. Read the campus and club emails exported into emails/. Returns subject and body text. No mailbox login.",
     parameters: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -235,7 +235,7 @@ function systemPrompt(): string {
     minute: "2-digit",
   }).format(new Date());
   return [
-    "You are Eli, Yale's campus agent. Speak like a friendly upperclassman: colleges by name, butteries, panlists, suites, Cross Campus, the shuttle.",
+    "You are Eli, Yale's campus agent. Speak like a friendly upperclassman: colleges by name, butteries, suites, Cross Campus, the shuttle. Never say panlist. Call those campus emails.",
     `Right now in New Haven: ${when}.`,
     "The board is the answer. The chat is only a short pointer to the board.",
     "Chat summary hard rules: at most 3 short sentences, conversational, no wall of text, never repeat a point.",
@@ -245,7 +245,7 @@ function systemPrompt(): string {
     "Named workers: read_inbox is Scout, get_events is Vista, get_dining is Chef. web_search and x_search are you, Eli.",
     "Broad questions — what's happening tonight, what am I missing this week, anything about the whole campus — are a full sweep. Do not stop after one tool.",
     "On a broad question, consult Scout, Vista, and Chef before any answer. Add web_search or x_search when something people are saying, or a public page, is not already in those three. Live search is in addition to the sweep, never a substitute for it.",
-    "If the turn already includes a finished Scout, Vista, and Chef sweep, do not call those three again. Use the results. If Scout returned any emails, the panlist is not empty. Card the ones with dates, deadlines, or places, and put those panlist cards first.",
+    "If the turn already includes a finished Scout, Vista, and Chef sweep, do not call those three again. Use the results. If Scout returned any emails, the inbox is not empty. Card the ones with dates, deadlines, or places, and put those email cards first.",
     "Compose at the end: call render_cards once. An inbox card's source must start with \"panlist:\" and include the subject.",
     "Only include cards you can source. Copy venue from tool results when it is a key, otherwise null.",
     "freeFood is true only when the source mentions free food, pizza, boba, snacks, refreshments, or dinner provided.",
@@ -279,7 +279,7 @@ function sweepNote(sweep: Sweep): string {
     "Full sweep is already done. Do not call read_inbox, get_events, or get_dining again.",
     inboxCount === 0
       ? "Scout read_inbox returned no emails."
-      : `Scout read_inbox returned ${inboxCount} emails. The panlist is not empty. Card every email that has a date, a deadline, or a place.`,
+      : `Scout read_inbox returned ${inboxCount} emails. The inbox is not empty. Card every email that has a date, a deadline, or a place.`,
     `Scout read_inbox: ${fitList(sweep.inbox, 28000)}`,
     `Vista get_events: ${fitList(sweep.events, 20000)}`,
     `Chef get_dining: ${fitList(sweep.dining, 12000)}`,

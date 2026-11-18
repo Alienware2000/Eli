@@ -32,7 +32,7 @@ export function Header({ counts }: { counts: LiveCounts | null }) {
     <header className="flex items-center justify-between gap-4 border-b border-white/7 px-5 py-3">
       <div className="flex shrink-0 items-center gap-3">
         <Mark className="h-8 w-8" />
-        <h1 className="text-[15px] font-semibold tracking-[0.18em] text-ink">ELI</h1>
+        <h1 className="text-[18px] font-medium tracking-tight text-[#f3ece3]">eli</h1>
       </div>
       <p className="status-strip">
         {emails} emails · {events} events · {halls} halls · last sweep {sweep}
